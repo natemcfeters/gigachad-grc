@@ -86,11 +86,13 @@
       "baseUrl": "/",
       "redirectUris": [
         "http://localhost:3000/*",
-        "http://localhost/*"
+        "http://localhost/*",
+        "http://localhost:8443/*"
       ],
       "webOrigins": [
         "http://localhost:3000",
         "http://localhost",
+        "http://localhost:8443",
         "+"
       ],
       "defaultClientScopes": [

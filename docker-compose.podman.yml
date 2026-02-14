@@ -1,0 +1,89 @@
+# =============================================================================
+# Podman Override for GigaChad GRC
+# =============================================================================
+# Adapts the stock docker-compose.yml for rootless Podman on a devbox.
+#
+# Usage:
+#   podman-compose -f docker-compose.yml -f docker-compose.podman.yml up -d
+#
+# What this does:
+#   - Disables Traefik (nginx reverse-proxies /api/ to controls internally)
+#   - Pins all images to fully-qualified registry names (avoids Podman prompts)
+#   - Fixes Keycloak v2 hostname format and uses a separate Keycloak database
+#   - Fixes RustFS healthcheck (original endpoint not available on all builds)
+#   - Frontend on port 8443 with nginx API proxy (no CORS, single port)
+#   - Binds RustFS to 0.0.0.0 (some builds default to IPv6-only)
+#
+# Prerequisites:
+#   - Create database/init/00-create-keycloak-db.sql with:
+#       CREATE DATABASE keycloak;
+#   - Create .env with: KEYCLOAK_PORT=8081
+#     (or omit to use default 8080)
+#
+# VS Code SSH port forwards needed:
+#   8443  → frontend (nginx SPA + API proxy)
+#   8081  → Keycloak (auth — only if configuring Keycloak admin)
+# =============================================================================
+
+services:
+  # ── Disable Traefik (not needed — nginx proxies /api/ to controls) ────
+  traefik:
+    profiles:
+      - disabled
+
+  # ── Pin infrastructure images to docker.io FQDNs ──────────────────────
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+
+  # ── RustFS: pin image, bind to 0.0.0.0, fix healthcheck ──────────────
+  rustfs:
+    image: docker.io/rustfs/rustfs:latest
+    environment:
+      RUSTFS_ADDRESS: "0.0.0.0:9000"
+      RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:9000/ 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Keycloak: v2 hostname format, separate database, custom port ──────
+  # Keycloak 25 v2 hostname requires the full URL including scheme and port.
+  # We also use a dedicated database so Keycloak migrations don't collide
+  # with the app schema.
+  keycloak:
+    environment:
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KC_DB_NAME:-keycloak}
+      KC_HOSTNAME: http://${KEYCLOAK_HOSTNAME:-localhost}:${KEYCLOAK_PORT:-8080}
+      KC_HOSTNAME_PORT: ""
+      KC_HOSTNAME_STRICT_HTTPS: ""
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+
+  # ── Controls: allow cross-origin from frontend (belt-and-suspenders) ──
+  controls:
+    environment:
+      CORS_ORIGINS: "http://localhost:8443,http://localhost:3000,http://localhost:5173"
+
+  # ── Pin monitoring images ─────────────────────────────────────────────
+  prometheus:
+    image: docker.io/prom/prometheus:v2.47.1
+
+  grafana:
+    image: docker.io/grafana/grafana:10.2.0
+
+  # ── Frontend: nginx proxies /api/, serve on 8443 ──────────────────────
+  # VITE_API_URL is set to "" so the SPA uses relative paths (/api/...),
+  # which nginx reverse-proxies to controls:3001 inside the container
+  # network. This avoids CORS and the need to port-forward 3001.
+  frontend:
+    build:
+      args:
+        VITE_API_URL: ""
+        VITE_KEYCLOAK_URL: http://localhost:${KEYCLOAK_PORT:-8081}
+    ports:
+      - "8443:80"

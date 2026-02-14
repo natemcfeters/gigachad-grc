@@ -87,7 +87,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
     ports:
-      - "8080:8080"
+      - "${KEYCLOAK_PORT:-8080}:8080"
     volumes:
       - ./auth/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     depends_on:
@@ -122,10 +122,10 @@ services:
       - grc-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:9001/rustfs/console/index.html || exit 1"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:9000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 10s
 
   # ===========================================
@@ -430,7 +430,7 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: grc-frontend
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     environment:
       - VITE_API_URL=http://localhost:3001
       - VITE_ENABLE_DEV_AUTH=true

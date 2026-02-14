@@ -10,15 +10,14 @@
 #   - Disables Traefik (nginx reverse-proxies /api/ to controls internally)
 #   - Pins all images to fully-qualified registry names (avoids Podman prompts)
 #   - Fixes Keycloak v2 hostname format and uses a separate Keycloak database
-#   - Fixes RustFS healthcheck (original endpoint not available on all builds)
-#   - Frontend on port 8443 with nginx API proxy (no CORS, single port)
 #   - Binds RustFS to 0.0.0.0 (some builds default to IPv6-only)
+#   - Frontend on FRONTEND_PORT (default 8443) with nginx API proxy (no CORS, single port)
 #
 # Prerequisites:
 #   - Create database/init/00-create-keycloak-db.sql with:
 #       CREATE DATABASE keycloak;
-#   - Create .env with: KEYCLOAK_PORT=8081
-#     (or omit to use default 8080)
+#   - Create .env with: KEYCLOAK_PORT=8081, FRONTEND_PORT=8443
+#     (or omit to use defaults 8080 / 3000)
 #
 # VS Code SSH port forwards needed:
 #   8443  → frontend (nginx SPA + API proxy)
@@ -38,18 +37,12 @@ services:
   redis:
     image: docker.io/library/redis:7-alpine
 
-  # ── RustFS: pin image, bind to 0.0.0.0, fix healthcheck ──────────────
+  # ── RustFS: pin image, bind to 0.0.0.0 ──────────────
   rustfs:
     image: docker.io/rustfs/rustfs:latest
     environment:
       RUSTFS_ADDRESS: "0.0.0.0:9000"
       RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:9000/ 2>/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   # ── Keycloak: v2 hostname format, separate database, custom port ──────
   # Keycloak 25 v2 hostname requires the full URL including scheme and port.
@@ -61,8 +54,6 @@ services:
       KC_HOSTNAME: http://${KEYCLOAK_HOSTNAME:-localhost}:${KEYCLOAK_PORT:-8080}
       KC_HOSTNAME_PORT: ""
       KC_HOSTNAME_STRICT_HTTPS: ""
-    ports:
-      - "${KEYCLOAK_PORT:-8080}:8080"
 
   # ── Controls: allow cross-origin from frontend (belt-and-suspenders) ──
   controls:
@@ -85,5 +76,3 @@ services:
       args:
         VITE_API_URL: ""
         VITE_KEYCLOAK_URL: http://localhost:${KEYCLOAK_PORT:-8081}
-    ports:
-      - "8443:80"

@@ -26,7 +26,7 @@ import { PermissionGuard } from '../auth/permission.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { Resource, Action } from '../permissions/dto/permission.dto';
 
-@Controller('workspaces')
+@Controller('api/workspaces')
 @UseGuards(DevAuthGuard, PermissionGuard)
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
